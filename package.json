@@ -1,0 +1,24 @@
+{
+  "name": "industrial-maintenance-system",
+  "version": "1.0.0",
+  "description": "Industrial Maintenance Management System with Node.js, Express, and Microsoft SQL Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "industrial",
+    "maintenance",
+    "express",
+    "mssql"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "msnodesqlv8": "^6.2.1",
+    "mssql": "^12.7.13"
+  }
+}

@@ -1,21 +1,35 @@
 // ==========================================
-// 1. Data Store (Single Source of Truth)
+// 1. Backend API Configuration
 // ==========================================
-// Starts empty for the current session.
-// We use 'let' so we can update the list when deleting items.
+// Automatically connects to the Express backend.
+// If the user opens index.html directly from file://, it connects to http://localhost:3000
+const API_BASE_URL = (window.location.protocol === "file:" || window.location.origin === "null")
+    ? "http://localhost:3000/api/equipment"
+    : "/api/equipment";
+
+// ==========================================
+// 2. Data Store (Single Source of Truth)
+// ==========================================
+// Loaded directly from Microsoft SQL Server.
 let equipmentList = [];
 
 // Tracks which equipment item is currently being edited.
-// null = Add Mode (creating a new item)
-// number (id) = Edit Mode (updating an existing item)
+// null = Add Mode (creating a new record)
+// number (id) = Edit Mode (updating an existing record)
 let editingId = null;
 
+// Guard against duplicate submissions from fast double-clicks
+let isSubmitting = false;
+
 // ==========================================
-// 2. Select HTML Elements
+// 3. Select HTML Elements
 // ==========================================
 // Dashboard counter elements
 const totalEquipment = document.getElementById("total-equipment");
 const openRequests = document.getElementById("open-requests");
+
+// System notification banner
+const systemBanner = document.getElementById("system-banner");
 
 // Form elements
 const formTitle = document.getElementById("form-title");
@@ -35,29 +49,44 @@ totalEquipment.textContent = 0;
 openRequests.textContent = 0;
 
 // ==========================================
-// 3. Render Function
+// 4. Banner Helper Functions
+// ==========================================
+function showSystemBanner(message, type = "error") {
+    if (!systemBanner) return;
+    systemBanner.textContent = message;
+    systemBanner.className = `system-banner ${type}`;
+    systemBanner.style.display = "block";
+}
+
+function clearSystemBanner() {
+    if (!systemBanner) return;
+    systemBanner.textContent = "";
+    systemBanner.style.display = "none";
+}
+
+// ==========================================
+// 5. Render Function
 // ==========================================
 // Keeps the UI in sync with the equipmentList array.
 function renderEquipment() {
-    // 1. Update the counter to always match the number of items
+    // 1. Update the counter to always match database count
     totalEquipment.textContent = equipmentList.length;
 
-    // 2. Check if the list is empty
+    // 2. Check if the database has no records
     if (equipmentList.length === 0) {
         emptyEquipmentMsg.style.display = "block";
         equipmentListElement.innerHTML = "";
         return;
     }
 
-    // 3. Hide the empty message if items exist
+    // 3. Hide empty message if records exist
     emptyEquipmentMsg.style.display = "none";
 
-    // 4. Clear the existing list before rebuilding it
+    // 4. Clear list before rebuilding it
     equipmentListElement.innerHTML = "";
 
-    // 5. Loop through each item and create its HTML card with action buttons
+    // 5. Loop through each item and render its card
     equipmentList.forEach((item) => {
-        // Create the parent card container
         const li = document.createElement("li");
         li.className = "equipment-item";
 
@@ -74,7 +103,7 @@ function renderEquipment() {
         infoDiv.appendChild(nameElement);
         infoDiv.appendChild(locationElement);
 
-        // Right side: Action buttons (Edit & Delete)
+        // Right side: Action buttons
         const actionsDiv = document.createElement("div");
         actionsDiv.className = "equipment-actions";
 
@@ -90,131 +119,195 @@ function renderEquipment() {
         deleteBtn.type = "button";
         deleteBtn.className = "btn-delete";
         deleteBtn.textContent = "Delete";
-        deleteBtn.addEventListener("click", () => deleteEquipment(item.id));
+        deleteBtn.addEventListener("click", () => deleteEquipment(item.id, item.name));
 
         actionsDiv.appendChild(editBtn);
         actionsDiv.appendChild(deleteBtn);
 
-        // Attach left info and right buttons to the list item
         li.appendChild(infoDiv);
         li.appendChild(actionsDiv);
 
-        // Attach the list item to the <ul>
         equipmentListElement.appendChild(li);
     });
 }
 
 // ==========================================
-// 4. Edit & Cancel Handlers
+// 6. Backend API Operations (Automatic Sync)
 // ==========================================
 
-// Pre-fills the form with an item's current details and enters "Edit Mode"
+/**
+ * Automatically loads all existing equipment from SQL Server.
+ */
+async function loadEquipment() {
+    try {
+        formError.textContent = "";
+        clearSystemBanner();
+
+        const response = await fetch(API_BASE_URL);
+
+        if (!response.ok) {
+            throw new Error(`Server returned error status: ${response.status}`);
+        }
+
+        equipmentList = await response.json();
+        renderEquipment();
+    } catch (error) {
+        console.error("Error connecting to server:", error);
+        showSystemBanner(
+            "⚠️ Cannot connect to backend server. Please run 'npm start' in your project terminal and visit http://localhost:3000",
+            "error"
+        );
+        formError.textContent = "Server is offline or unreachable.";
+    }
+}
+
+/**
+ * Pre-fills the form with an item's details and switches to Edit Mode.
+ */
 function startEdit(id) {
-    // Find the item with the matching unique id
     const item = equipmentList.find((equipment) => equipment.id === id);
     if (!item) return;
 
-    // Set edit mode to this item's id
     editingId = id;
-
-    // Put current values into the input fields
     equipmentNameInput.value = item.name;
     equipmentLocationInput.value = item.location;
-
-    // Clear any previous error messages
     formError.textContent = "";
+    clearSystemBanner();
 
-    // Change form UI to indicate we are editing
     formTitle.textContent = "Edit Equipment";
     submitBtn.textContent = "Update Equipment";
     cancelBtn.style.display = "inline-block";
-
-    // Focus the first input field for convenience
     equipmentNameInput.focus();
 }
 
-// Exits "Edit Mode" and resets the form back to "Add Mode"
+/**
+ * Exits Edit Mode and restores the form to Add Mode.
+ */
 function cancelEdit() {
-    // Reset edit state
     editingId = null;
-
-    // Clear input fields and errors
     equipmentForm.reset();
     formError.textContent = "";
 
-    // Restore form UI back to Add Mode
     formTitle.textContent = "Register Equipment";
     submitBtn.textContent = "Add Equipment";
     cancelBtn.style.display = "none";
 }
 
-// Connect the Cancel button click to cancelEdit
 cancelBtn.addEventListener("click", cancelEdit);
 
-// ==========================================
-// 5. Delete Handler
-// ==========================================
-function deleteEquipment(id) {
-    // If we are currently editing the item being deleted, cancel edit mode
-    if (editingId === id) {
-        cancelEdit();
+/**
+ * Deletes an equipment record from SQL Server.
+ */
+async function deleteEquipment(id, name) {
+    // Confirmation dialog prevents accidental deletion of real equipment
+    const confirmed = confirm(`Are you sure you want to delete "${name || 'this item'}"?`);
+    if (!confirmed) return;
+
+    try {
+        formError.textContent = "";
+        clearSystemBanner();
+
+        const response = await fetch(`${API_BASE_URL}/${id}`, {
+            method: "DELETE"
+        });
+
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || "Failed to delete equipment.");
+        }
+
+        // If we were currently editing this item, exit edit mode
+        if (editingId === id) {
+            cancelEdit();
+        }
+
+        // Reload fresh list from SQL Server to keep counter perfectly synchronized
+        await loadEquipment();
+    } catch (error) {
+        console.error("Error deleting equipment:", error);
+        formError.textContent = error.message;
+        showSystemBanner(`Failed to delete equipment: ${error.message}`, "error");
     }
-
-    // Keep all equipment EXCEPT the one with this unique id
-    equipmentList = equipmentList.filter((equipment) => equipment.id !== id);
-
-    // Refresh the list and update the dashboard counter
-    renderEquipment();
 }
 
 // ==========================================
-// 6. Form Submission (Add or Update)
+// 7. Form Submission (Add or Update via API)
 // ==========================================
-equipmentForm.addEventListener("submit", function (event) {
-    // Prevent page reload
+equipmentForm.addEventListener("submit", async function (event) {
+    // Prevent browser page reload
     event.preventDefault();
 
-    // Read values and remove extra whitespace
+    // Prevent duplicate submission from rapid clicks
+    if (isSubmitting) return;
+
     const name = equipmentNameInput.value.trim();
     const location = equipmentLocationInput.value.trim();
 
-    // Validation: both fields must be filled
+    // Input validation
     if (name === "" || location === "") {
         formError.textContent = "Please fill in both the equipment name and location.";
         return;
     }
 
-    // Clear error message
     formError.textContent = "";
+    clearSystemBanner();
 
-    if (editingId === null) {
-        // --- ADD MODE ---
-        equipmentList.push({
-            id: Date.now(), // Unique identifier
-            name: name,
-            location: location
-        });
-    } else {
-        // --- EDIT MODE ---
-        const itemToUpdate = equipmentList.find((equipment) => equipment.id === editingId);
-        if (itemToUpdate) {
-            itemToUpdate.name = name;
-            itemToUpdate.location = location;
+    // Lock submission state
+    isSubmitting = true;
+    submitBtn.disabled = true;
+    const isEditing = editingId !== null;
+    submitBtn.textContent = isEditing ? "Updating..." : "Adding...";
+
+    try {
+        if (!isEditing) {
+            // --- ADD MODE: POST to SQL Server ---
+            const response = await fetch(API_BASE_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, location })
+            });
+
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.error || "Failed to add equipment.");
+            }
+        } else {
+            // --- EDIT MODE: PUT to SQL Server ---
+            const response = await fetch(`${API_BASE_URL}/${editingId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, location })
+            });
+
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.error || "Failed to update equipment.");
+            }
+
+            // Restore form back to Add Mode
+            cancelEdit();
         }
 
-        // Return form state back to Add Mode
-        editingId = null;
-        formTitle.textContent = "Register Equipment";
-        submitBtn.textContent = "Add Equipment";
-        cancelBtn.style.display = "none";
+        // Reset inputs and reload fresh data from SQL Server
+        equipmentForm.reset();
+        await loadEquipment();
+    } catch (error) {
+        console.error("Error saving equipment:", error);
+        formError.textContent = error.message;
+        showSystemBanner(`Operation failed: ${error.message}`, "error");
+    } finally {
+        isSubmitting = false;
+        submitBtn.disabled = false;
+        submitBtn.textContent = editingId === null ? "Add Equipment" : "Update Equipment";
     }
-
-    // Clear the form inputs
-    equipmentForm.reset();
-
-    // Refresh the list and dashboard counter
-    renderEquipment();
 });
 
-// Run once on initial page load
-renderEquipment();
+// ==========================================
+// 8. Automatic Initial Load
+// ==========================================
+// Runs as soon as script loads or DOM is ready
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", loadEquipment);
+} else {
+    loadEquipment();
+}
