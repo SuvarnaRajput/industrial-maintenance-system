@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Industrial Maintenance System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <h1>Industrial Maintenance System</h1>
+        <p>Equipment and Maintenance Dashboard</p>
+    </header>
+
+    <main>
+        <section class="dashboard">
+            <h2>Dashboard</h2>
+
+            <div class="card">
+                <h3>Total Equipment</h3>
+                <p id="total-equipment">0</p>
+            </div>
+
+            <div class="card">
+                <h3>Open Maintenance Requests</h3>
+                <p id="open-requests">0</p>
+            </div>
+        </section>
+
+        <section class="content-grid">
+            <div class="card-section">
+                <h2>Register Equipment</h2>
+                <form id="equipment-form">
+                    <div class="form-group">
+                        <label for="equipment-name">Equipment Name</label>
+                        <input type="text" id="equipment-name" placeholder="e.g. Hydraulic Press 01" autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="equipment-location">Location</label>
+                        <input type="text" id="equipment-location" placeholder="e.g. Bay 3, Plant Floor" autocomplete="off">
+                    </div>
+
+                    <p id="form-error" class="error-message"></p>
+
+                    <button type="submit" class="btn-primary">Add Equipment</button>
+                </form>
+            </div>
+
+            <div class="card-section">
+                <h2>Registered Equipment</h2>
+                <p id="empty-equipment-msg" class="empty-message">No equipment registered yet.</p>
+                <ul id="equipment-list" class="equipment-list"></ul>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
