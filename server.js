@@ -1,17 +1,61 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const path = require("path");
 const { sql, getPool, closePool } = require("./db");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || "0.0.0.0";
 
-// Middleware
+// ==========================================
+// Middleware & Security
+// ==========================================
+// Set security HTTP headers with safe CSP for UI elements
+app.use(
+    helmet({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                imgSrc: ["'self'", "data:"],
+                connectSrc: ["'self'"]
+            }
+        }
+    })
+);
+
 app.use(cors());
 app.use(express.json());
-// Serve static frontend files (index.html, style.css, script.js)
-app.use(express.static(path.join(__dirname)));
+
+// Serve static frontend files exclusively from the public/ directory
+app.use(express.static(path.join(__dirname, "public")));
+
+// ==========================================
+// Health-Check Endpoint (For Cloud Monitors)
+// ==========================================
+app.get("/api/health", async (req, res) => {
+    try {
+        const pool = await getPool();
+        await pool.request().query("SELECT 1 AS healthy");
+        res.json({
+            status: "healthy",
+            uptime: Math.floor(process.uptime()),
+            database: "connected",
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(503).json({
+            status: "unhealthy",
+            uptime: Math.floor(process.uptime()),
+            database: "disconnected",
+            error: process.env.NODE_ENV === "production" ? "Database connection unavailable" : error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
 
 // ==========================================
 // REST API Routes for Equipment
@@ -216,14 +260,20 @@ app.delete("/api/equipment/:id", async (req, res, next) => {
     }
 });
 
+// Explicit route to serve index.html
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
 // ==========================================
-// Error Handling Middleware
+// Error Handling Middleware (Production Masking)
 // ==========================================
 app.use((err, req, res, next) => {
     console.error("Server Error:", err);
-    res.status(500).json({
+    const isProduction = process.env.NODE_ENV === "production";
+    res.status(err.status || 500).json({
         error: "Internal Server Error",
-        message: err.message
+        message: isProduction ? "An unexpected error occurred. Please try again later." : err.message
     });
 });
 
@@ -232,10 +282,10 @@ app.use((err, req, res, next) => {
 // ==========================================
 let serverInstance = null;
 
-function startServer(port = PORT) {
+function startServer(port = PORT, host = HOST) {
     return new Promise((resolve, reject) => {
-        serverInstance = app.listen(port, async () => {
-            console.log(`Industrial Maintenance server running at http://localhost:${port}`);
+        serverInstance = app.listen(port, host, async () => {
+            console.log(`Industrial Maintenance server running at http://${host}:${port}`);
             try {
                 await getPool();
                 resolve(serverInstance);
@@ -261,13 +311,11 @@ async function stopServer() {
 process.on("SIGINT", async () => {
     console.log("\nReceived SIGINT. Shutting down gracefully...");
     await stopServer();
-    process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
     console.log("\nReceived SIGTERM. Shutting down gracefully...");
     await stopServer();
-    process.exit(0);
 });
 
 // Start automatically when run directly: `node server.js`
