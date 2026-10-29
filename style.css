@@ -96,6 +96,12 @@ main {
     border-color: #17365d;
 }
 
+.form-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
 .btn-primary {
     background-color: #17365d;
     color: white;
@@ -110,6 +116,22 @@ main {
 
 .btn-primary:hover {
     background-color: #0f2440;
+}
+
+.btn-secondary {
+    background-color: #e2e8f0;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-secondary:hover {
+    background-color: #cbd5e1;
 }
 
 .error-message {
@@ -136,11 +158,19 @@ main {
 }
 
 .equipment-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     border: 1px solid #e2e8f0;
     border-left: 4px solid #17365d;
     border-radius: 6px;
     padding: 12px 16px;
     background-color: #fbfcfd;
+    gap: 12px;
+}
+
+.equipment-info {
+    flex: 1;
 }
 
 .equipment-item strong {
@@ -153,4 +183,41 @@ main {
 .equipment-item span {
     font-size: 13px;
     color: #555;
+}
+
+.equipment-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-edit {
+    background-color: #f0f4f8;
+    color: #17365d;
+    border: 1px solid #c5d4e8;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-edit:hover {
+    background-color: #dbe7f5;
+}
+
+.btn-delete {
+    background-color: #fff1f2;
+    color: #e11d48;
+    border: 1px solid #fecdd3;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-delete:hover {
+    background-color: #ffe4e6;
 }
